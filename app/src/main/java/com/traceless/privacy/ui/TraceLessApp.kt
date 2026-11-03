@@ -112,7 +112,7 @@ private fun Dashboard(
     ) {
         item {
             Text("TRACELESS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-            Text("Votre confidentialité,
+            Text("Votre confidentialité, à votre rythme.", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
 à votre rythme.", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Text("Un assistant local pour comprendre et améliorer vos réglages Android.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
