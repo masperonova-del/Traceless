@@ -89,7 +89,11 @@ fun TraceLessApp() {
                     checks.filter { it.category == CheckCategory.SECURITY },
                     store, { refresh++ }
                 )
-                3 -> TrackingScreen(Modifier.padding(padding))
+                3 -> TrackingScreen(
+                    Modifier.padding(padding),
+                    store,
+                    { refresh++ }
+                )
                 else -> ReportsScreen(Modifier.padding(padding), store, completed, checks.size)
             }
         }
@@ -218,7 +222,13 @@ private fun openRelevantSettings(context: android.content.Context, id: String) {
 }
 
 @Composable
-private fun TrackingScreen(modifier: Modifier) {
+private fun TrackingScreen(
+    modifier: Modifier,
+    store: LocalPreferences,
+    onChanged: () -> Unit
+) {
+    var confirmed by remember { mutableStateOf(store.isChecked("tracker_awareness")) }
+
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Text("Anti-traçage", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
@@ -229,6 +239,28 @@ private fun TrackingScreen(modifier: Modifier) {
                     Text("Cette version ne capture pas les connexions, ne détecte pas automatiquement les trackers et ne bloque aucun domaine.")
                     Text("La prochaine étape sera un moteur local facultatif basé sur Android VpnService, avec consentement explicite et sans serveur VPN distant.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    HorizontalDivider()
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = confirmed,
+                            onCheckedChange = { checked ->
+                                confirmed = checked
+                                store.setChecked("tracker_awareness", checked)
+                                onChanged()
+                            }
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "J'ai lu et compris les limites actuelles du module",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    Text(
+                        if (confirmed) "Lecture confirmée sur cet appareil" else "Lecture non confirmée",
+                        color = if (confirmed) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelSmall
+                    )
                 }
             }
         }
