@@ -171,11 +171,31 @@ private fun CheckListScreen(
     onChanged: () -> Unit
 ) {
     val context = LocalContext.current
+    var diagnosticsRefresh by remember { mutableIntStateOf(0) }
+    val privateDnsStatus = remember(diagnosticsRefresh) { readPrivateDnsStatus(context) }
+
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Text("Lisez chaque explication, vérifiez le réglage sur votre appareil, puis cochez uniquement si vous l'avez réellement contrôlé.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (title == "Confidentialité") {
+            item {
+                Card(colors = CardDefaults.cardColors(containerColor = SurfaceDark), shape = RoundedCornerShape(18.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Vérification Android : DNS privé", fontWeight = FontWeight.Bold)
+                        Text(privateDnsStatus, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Cette lecture provient du réglage système Android. Elle ne vérifie pas le contenu des connexions ni la confidentialité de tout le trafic.",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        OutlinedButton(onClick = { diagnosticsRefresh++ }) {
+                            Icon(Icons.Default.Refresh, contentDescription = null)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Actualiser le contrôle")
+                        }
+                    }
+                }
+            }
         }
         items(items, key = { it.id }) { item ->
             var checked by remember(item.id) { mutableStateOf(store.isChecked(item.id)) }
@@ -201,6 +221,32 @@ private fun CheckListScreen(
                 }
             }
         }
+    }
+}
+
+private fun readPrivateDnsStatus(context: android.content.Context): String {
+    return runCatching {
+        val mode = Settings.Global.getString(
+            context.contentResolver,
+            Settings.Global.PRIVATE_DNS_MODE
+        )
+        val hostname = Settings.Global.getString(
+            context.contentResolver,
+            Settings.Global.PRIVATE_DNS_SPECIFIER
+        )
+        when (mode?.lowercase(Locale.ROOT)) {
+            "off" -> "DNS privé désactivé selon Android."
+            "opportunistic" -> "DNS privé en mode automatique. Android utilise le chiffrement DNS lorsque le serveur le prend en charge."
+            "hostname" -> if (!hostname.isNullOrBlank()) {
+                "DNS privé configuré avec un fournisseur nommé : $hostname."
+            } else {
+                "Mode DNS privé personnalisé détecté, mais aucun nom de fournisseur n'est lisible."
+            }
+            null, "" -> "État du DNS privé indisponible sur cette version ou cet appareil."
+            else -> "Mode DNS privé signalé par Android : $mode."
+        }
+    }.getOrElse {
+        "Impossible de lire l'état du DNS privé sur cet appareil."
     }
 }
 
@@ -273,7 +319,6 @@ private fun TrackingScreen(
 
 @Composable
 private fun ReportsScreen(modifier: Modifier, store: LocalPreferences, completed: Int, total: Int) {
-    val context = LocalContext.current
     var lastReview by remember { mutableLongStateOf(store.lastReview()) }
     val dateText = if (lastReview == 0L) "Aucun bilan enregistré" else
         SimpleDateFormat("dd/MM/yyyy à HH:mm", Locale.getDefault()).format(Date(lastReview))
