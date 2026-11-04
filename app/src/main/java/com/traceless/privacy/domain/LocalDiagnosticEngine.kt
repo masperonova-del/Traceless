@@ -74,7 +74,7 @@ object LocalDiagnosticEngine {
                     "Chiffrement actif selon Android",
                     "Le système signale que le stockage de l’appareil est chiffré.",
                     "Gardez Android et le verrouillage de l’écran à jour.")
-            DevicePolicyManager.ENCRYPTION_STATUS_INACTIVE,
+            DevicePolicyManager.ENCRYPTION_STATUS_INACTIVE ->
                 DiagnosticResult("encryption", "Chiffrement du stockage", DiagnosticStatus.WARNING,
                     "Chiffrement non actif selon Android",
                     "Le statut système ne confirme pas le chiffrement actif.",
