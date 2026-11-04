@@ -45,10 +45,37 @@ fun TraceLessApp() {
     val context = LocalContext.current
     val store = remember { LocalPreferences(context.applicationContext) }
     var selectedTab by remember { mutableIntStateOf(0) }
-    var refresh by remember { mutableIntStateOf(0) }
-    val snapshot = remember(refresh) { LocalDiagnosticEngine.scan(context.applicationContext) }
+    val appContext = context.applicationContext
+    var snapshot by remember { mutableStateOf(LocalDiagnosticEngine.scan(appContext)) }
+    var isScanning by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
-    LaunchedEffect(snapshot.scanTime) { store.saveLastScan(snapshot.scanTime) }
+    fun runLocalScan() {
+        if (isScanning) return
+        isScanning = true
+        scope.launch {
+            val next = withContext(Dispatchers.Default) {
+                LocalDiagnosticEngine.scan(appContext)
+            }
+            snapshot = next
+            store.saveScanSummary(
+                next.scanTime,
+                next.goodCount,
+                next.warningCount,
+                next.results.count { it.status == DiagnosticStatus.UNAVAILABLE }
+            )
+            isScanning = false
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        store.saveScanSummary(
+            snapshot.scanTime,
+            snapshot.goodCount,
+            snapshot.warningCount,
+            snapshot.results.count { it.status == DiagnosticStatus.UNAVAILABLE }
+        )
+    }
 
     MaterialTheme(
         colorScheme = darkColorScheme(
@@ -94,11 +121,12 @@ fun TraceLessApp() {
             when (selectedTab) {
                 0 -> OverviewScreen(
                     Modifier.padding(padding), snapshot,
-                    onScan = { refresh++ },
+                    onScan = { runLocalScan() },
+                    isScanning = isScanning,
                     onDiagnostics = { selectedTab = 1 },
                     onNetwork = { selectedTab = 2 }
                 )
-                1 -> DiagnosticScreen(Modifier.padding(padding), snapshot, onScan = { refresh++ })
+                1 -> DiagnosticScreen(Modifier.padding(padding), snapshot, onScan = { runLocalScan() }, isScanning = isScanning)
                 2 -> NetworkScreen(Modifier.padding(padding))
                 else -> ReportsScreen(Modifier.padding(padding), store, snapshot)
             }
@@ -111,6 +139,7 @@ private fun OverviewScreen(
     modifier: Modifier,
     snapshot: DeviceSnapshot,
     onScan: () -> Unit,
+    isScanning: Boolean,
     onDiagnostics: () -> Unit,
     onNetwork: () -> Unit
 ) {
@@ -164,10 +193,26 @@ private fun OverviewScreen(
                     }
                     Text("Ces indicateurs résument les contrôles accessibles à Android. Ils ne constituent pas une certification de sécurité.",
                         color = Muted, style = MaterialTheme.typography.bodySmall)
-                    Button(onClick = onScan, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
-                        Icon(Icons.Default.Refresh, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Relancer le diagnostic local")
+                    Text(
+                        "Dernière exécution : " + SimpleDateFormat("dd/MM/yyyy à HH:mm:ss", Locale.getDefault()).format(Date(snapshot.scanTime)),
+                        color = Muted,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Button(
+                        onClick = onScan,
+                        enabled = !isScanning,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        if (isScanning) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Diagnostic en cours…")
+                        } else {
+                            Icon(Icons.Default.Refresh, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Relancer le diagnostic local")
+                        }
                     }
                 }
             }
@@ -228,7 +273,12 @@ private fun ActionCard(
 }
 
 @Composable
-private fun DiagnosticScreen(modifier: Modifier, snapshot: DeviceSnapshot, onScan: () -> Unit) {
+private fun DiagnosticScreen(
+    modifier: Modifier,
+    snapshot: DeviceSnapshot,
+    onScan: () -> Unit,
+    isScanning: Boolean
+) {
     LazyColumn(
         modifier.fillMaxSize(),
         contentPadding = PaddingValues(20.dp),
@@ -242,12 +292,23 @@ private fun DiagnosticScreen(modifier: Modifier, snapshot: DeviceSnapshot, onSca
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("${snapshot.results.size} contrôles", color = Muted, modifier = Modifier.weight(1f))
-                OutlinedButton(onClick = onScan) {
-                    Icon(Icons.Default.Refresh, null)
+                OutlinedButton(onClick = onScan, enabled = !isScanning) {
+                    if (isScanning) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Default.Refresh, null)
+                    }
                     Spacer(Modifier.width(6.dp))
-                    Text("Actualiser")
+                    Text(if (isScanning) "Analyse…" else "Actualiser")
                 }
             }
+        }
+        item {
+            Text(
+                "Dernière exécution : " + SimpleDateFormat("dd/MM/yyyy à HH:mm:ss", Locale.getDefault()).format(Date(snapshot.scanTime)),
+                color = Muted,
+                style = MaterialTheme.typography.bodySmall
+            )
         }
         items(snapshot.results, key = { it.id }) { result -> DiagnosticCard(result) }
         item {
@@ -410,8 +471,9 @@ private fun ResultLine(label: String, value: String) {
 
 @Composable
 private fun ReportsScreen(modifier: Modifier, store: LocalPreferences, snapshot: DeviceSnapshot) {
-    val dateText = if (store.lastScan() == 0L) "Aucun diagnostic enregistré" else
-        SimpleDateFormat("dd/MM/yyyy à HH:mm", Locale.getDefault()).format(Date(store.lastScan()))
+    val history = store.scanHistory()
+    val dateText = if (history.isEmpty()) "Aucun diagnostic enregistré" else
+        SimpleDateFormat("dd/MM/yyyy à HH:mm", Locale.getDefault()).format(Date(history.first().timestamp))
     LazyColumn(
         modifier.fillMaxSize(),
         contentPadding = PaddingValues(20.dp),
@@ -427,6 +489,26 @@ private fun ReportsScreen(modifier: Modifier, store: LocalPreferences, snapshot:
                     Text(dateText, style = MaterialTheme.typography.titleMedium)
                     Text("${snapshot.goodCount} contrôles conformes · ${snapshot.warningCount} à examiner · ${snapshot.results.size - snapshot.evaluatedCount} indisponibles",
                         color = Muted, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+        if (history.isNotEmpty()) {
+            item {
+                Text("Historique local récent", color = Turquoise, fontWeight = FontWeight.Bold)
+            }
+            items(history, key = { it.timestamp }) { entry ->
+                Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(14.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            SimpleDateFormat("dd/MM/yyyy à HH:mm:ss", Locale.getDefault()).format(Date(entry.timestamp)),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            "${entry.good} conformes · ${entry.warning} à examiner · ${entry.unavailable} indisponibles",
+                            color = Muted,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
             }
         }
