@@ -228,11 +228,11 @@ private fun readPrivateDnsStatus(context: android.content.Context): String {
     return runCatching {
         val mode = Settings.Global.getString(
             context.contentResolver,
-            Settings.Global.PRIVATE_DNS_MODE
+            "private_dns_mode"
         )
         val hostname = Settings.Global.getString(
             context.contentResolver,
-            Settings.Global.PRIVATE_DNS_SPECIFIER
+            "private_dns_specifier"
         )
         when (mode?.lowercase(Locale.ROOT)) {
             "off" -> "DNS privé désactivé selon Android."
