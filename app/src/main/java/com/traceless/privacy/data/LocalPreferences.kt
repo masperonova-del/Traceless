@@ -16,4 +16,10 @@ class LocalPreferences(context: Context) {
     }
 
     fun lastReview(): Long = prefs.getLong("last_review", 0L)
+
+    fun saveLastScan(timestamp: Long) {
+        prefs.edit().putLong("last_scan", timestamp).apply()
+    }
+
+    fun lastScan(): Long = prefs.getLong("last_scan", 0L)
 }
