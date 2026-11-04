@@ -140,8 +140,7 @@ private fun OverviewScreen(
             }
         }
         item {
-            Text("Votre appareil.
-Votre contrôle.", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+            Text("Votre appareil.\nVotre contrôle.", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
             Text("Diagnostic de confidentialité et de sécurité Android.", color = Muted)
         }
         item {
